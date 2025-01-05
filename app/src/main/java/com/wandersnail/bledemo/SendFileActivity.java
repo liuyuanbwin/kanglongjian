@@ -3,10 +3,17 @@ package com.wandersnail.bledemo;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.ParcelUuid;
+import android.util.Log;
+import android.view.View;
+import android.webkit.MimeTypeMap;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -16,6 +23,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.documentfile.provider.DocumentFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -55,6 +63,10 @@ public class SendFileActivity extends BaseActivity {
     private TextView tvPercent;
     private TextView tvProgress;
     private TextView tvState;
+    private ImageView imageView;
+    private Button btnConvertToRGB;
+    private ImageView ivReconstructedImage;
+    private RGBPointView rgbPointView;
     private ParcelUuid writeService;
     private ParcelUuid writeCharacteristic;
     private Connection connection;
@@ -68,6 +80,9 @@ public class SendFileActivity extends BaseActivity {
     private boolean isOldWaySelectFile;
     private final String requestId = UUID.randomUUID().toString();
     private ActivityResultLauncher<Intent> selectFileLauncher;
+    private int[] picData;
+
+    private  String filePath;
     
     
     @Override
@@ -94,30 +109,23 @@ public class SendFileActivity extends BaseActivity {
             btnSend.setEnabled(false);
             progressBar.setProgress(0);
             btnSelectFile.setEnabled(false);
-            totalLength = file != null ? file.length() : legacyFile.length();
+            int[] flattenedArray = this.picData;
+
+            Log.d("onCreate: ",Arrays.toString(flattenedArray));
+            byte[] data = this.convertToIntArrayToByteArray(flattenedArray);
+            Log.d("SendFileActivity", "data length: " + data.length);
+            totalLength = data.length;//file != null ? file.length() : legacyFile.length();
             sending = true;
             new Thread(()-> {
                 InputStream input = null;
-                try {
-                    if (file != null) {
-                        input = getContentResolver().openInputStream(file.getUri());
-                    } else {
-                        input = new FileInputStream(legacyFile);
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                if (input == null) {
-                    runOnUiThread(()-> {
-                        sending = false;
-                        btnSend.setEnabled(true);
-                        btnSelectFile.setEnabled(true);
-                        ToastUtils.showShort("文件打开失败");
-                    });
-                    return;
-                }
-                int packageSize = connection.getMtu() - 3;
+
+                int packageSize = 128;//connection.getMtu() - 3;
                 byte[] buf = new byte[packageSize];
+
+
+
+                input = new ByteArrayInputStream(data);
+
                 try {
                     int len = input.read(buf);
                     if (len != -1) {
@@ -146,6 +154,18 @@ public class SendFileActivity extends BaseActivity {
                 }
             }).start();
         });
+
+        // 新增按钮点击事件
+        btnConvertToRGB.setOnClickListener(v -> {
+            if (file != null) {
+                convertImageToRGB(file.getUri().getPath());
+            } else if (legacyFile != null) {
+                convertImageToRGB(legacyFile.getAbsolutePath());
+            } else {
+                ToastUtils.showShort("请先选择图片文件");
+            }
+        });
+
         selectFileLauncher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
             if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null && result.getData().getData() != null) {
                 if (isOldWaySelectFile) {
@@ -169,6 +189,7 @@ public class SendFileActivity extends BaseActivity {
                                 path = result.getData().getData().toString();
                             }
                             if (updateFileInfo(path, file.length())) {
+                                this.filePath = path;
                                 this.file = file;
                             }
                         }
@@ -192,6 +213,27 @@ public class SendFileActivity extends BaseActivity {
         tvPercent = findViewById(R.id.tvPercent);
         tvProgress = findViewById(R.id.tvProgress);
         tvState = findViewById(R.id.tvState);
+        imageView = findViewById(R.id.imageView);
+        btnConvertToRGB = findViewById(R.id.btnConvertToRGB);
+        ivReconstructedImage = findViewById(R.id.ivReconstructedImage);
+        rgbPointView = findViewById(R.id.rgbPointView); // 初始化 rgbPointView
+    }
+
+
+    private byte[] convertToIntArrayToByteArray(int[] intArray) {
+
+        // 每个int值将转换为4个字节，所以byte数组的大小是int数组大小的4倍
+        byte[] byteArray = new byte[intArray.length * 4];
+
+        for (int i = 0; i < intArray.length; i++) {
+            int intValue = intArray[i];
+            // 将int值转换为4个字节，并存储到byte数组中
+            for (int j = 0; j < 4; j++) {
+                byteArray[i * 4 + j] = (byte) (intValue >> ((3 - j) * 8));
+            }
+        }
+
+        return byteArray;
     }
     
     private boolean updateFileInfo(String path, long len) {
@@ -209,9 +251,112 @@ public class SendFileActivity extends BaseActivity {
         sentLength = 0;
         tvState.setText("");
         updateProgress();
+
+        // 检查文件是否为图片并加载
+        if (isImageFile(path)) {
+            loadImage(path);
+        } else {
+            imageView.setImageDrawable(null); // 清除 ImageView
+        }
+
         return true;
     }
-    
+
+    // 添加检查文件是否为图片的方法
+    private boolean isImageFile(String path) {
+        String mimeType = null;
+        if (path != null) {
+            MimeTypeMap mime = MimeTypeMap.getSingleton();
+            int index = path.lastIndexOf('.');
+            if (index > -1) {
+                String extension = path.substring(index + 1).toLowerCase();
+                mimeType = mime.getMimeTypeFromExtension(extension);
+            }
+        }
+        return mimeType != null && mimeType.startsWith("image/");
+    }
+
+    // 添加加载图片的方法
+    private void loadImage(String path) {
+        // 从文件路径加载图片并缩放到128x128
+        Bitmap bitmap = decodeSampledBitmapFromFile(path, 128, 128);
+        // 将图片设置到 ImageView
+        imageView.setImageBitmap(bitmap);
+    }
+
+    // 添加缩放图片的方法
+    private Bitmap decodeSampledBitmapFromFile(String path, int reqWidth, int reqHeight) {
+        // 第一次解码，只获取图片的宽高信息
+        final BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(path, options);
+
+        // 计算缩放比例
+        options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight);
+
+        // 第二次解码，加载缩放后的图片
+        options.inJustDecodeBounds = false;
+        Bitmap bitmap = BitmapFactory.decodeFile(path, options);
+
+        // 将图片缩放到实际尺寸 128x128 像素
+        return Bitmap.createScaledBitmap(bitmap, 128, 128, true);
+    }
+
+    // 添加计算缩放比例的方法
+    private int calculateInSampleSize(BitmapFactory.Options options, int reqWidth, int reqHeight) {
+        // 图片的原始宽高
+        final int height = options.outHeight;
+        final int width = options.outWidth;
+        int inSampleSize = 1;
+
+        if (height > reqHeight || width > reqWidth) {
+            final int halfHeight = height / 2;
+            final int halfWidth = width / 2;
+
+            // 计算最大的 inSampleSize 值，使得宽高都小于等于请求的宽高
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2;
+            }
+        }
+
+        return inSampleSize;
+    }
+
+    // SendFileActivity.java
+    private void convertImageToRGB(String imagePath) {
+
+        Bitmap bitmap = decodeSampledBitmapFromFile(this.filePath, 128, 128);
+        if (bitmap == null) {
+            ToastUtils.showShort("图片加载111失败");
+            return;
+        }
+
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int[] pixels = new int[width * height];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+
+        // 重新绘制图片
+        Bitmap reconstructedBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        reconstructedBitmap.setPixels(pixels, 0, width, 0, 0, width, height);
+        ivReconstructedImage.setImageBitmap(reconstructedBitmap);
+
+        // 将一维像素数组转换为二维数组
+        int[][] rgbData = new int[height][width];
+        for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                rgbData[i][j] = pixels[i * width + j];
+            }
+        }
+
+        // 传递 RGB 数据给 rgbPointView
+        rgbPointView.setRGBData(rgbData);
+        this.picData = pixels;
+
+    }
+
+
+
     private final EventObserver eventObserver = new EventObserver() {
         @RunOn(ThreadMode.MAIN)
         @Override

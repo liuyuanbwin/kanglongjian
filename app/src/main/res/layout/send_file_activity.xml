@@ -5,6 +5,28 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- 添加 ImageView -->
+    <ImageView
+        android:id="@+id/imageView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:adjustViewBounds="true"
+        android:scaleType="centerCrop" />
+
+    <ImageView
+        android:id="@+id/ivReconstructedImage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
+    <!-- 插入新的 View -->
+    <!-- 添加 RGBPointView -->
+    <com.wandersnail.bledemo.RGBPointView
+        android:id="@+id/rgbPointView"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:background="#FFFFFF" />
+
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -44,6 +66,12 @@
             android:layout_marginStart="20dp"
             android:enabled="false"
             android:text="发送" />
+
+        <Button
+            android:id="@+id/btnConvertToRGB"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="转换为RGB" />
     </LinearLayout>
 
     <ProgressBar

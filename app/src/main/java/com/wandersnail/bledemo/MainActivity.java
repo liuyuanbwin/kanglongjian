@@ -121,22 +121,20 @@ public class MainActivity extends BaseActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch(item.getItemId()) {
+        switch (item.getItemId()) {
             case R.id.menuDisconnect:
                 EasyBLE.getInstance().disconnectConnection(device);
-        		break;
-            case R.id.menuConnect:
-            {
+                break;
+            case R.id.menuConnect: {
                 ConnectionConfiguration config = new ConnectionConfiguration();
                 config.setConnectTimeoutMillis(10000);
                 config.setRequestTimeoutMillis(1000);
                 config.setAutoReconnect(false);
                 config.setUseAutoConnect(false);
                 connection = EasyBLE.getInstance().connect(device, config);//观察者监听连接状态
-            }  
-        		break;
-            case R.id.menuAutoConnect:
-            {
+            }
+            break;
+            case R.id.menuAutoConnect: {
                 ConnectionConfiguration config = new ConnectionConfiguration();
                 config.setConnectTimeoutMillis(10000);
                 config.setRequestTimeoutMillis(1000);
@@ -144,17 +142,17 @@ public class MainActivity extends BaseActivity {
                 config.setUseAutoConnect(true);
                 connection = EasyBLE.getInstance().connect(device, config);//观察者监听连接状态
             }
-                break;
+            break;
         }
         return super.onOptionsItemSelected(item);
     }
 
     @Override
     public void onConnectFailed(@NonNull Device device, int failType) {
-        switch(failType) {
-            case Connection.CONNECT_FAIL_TYPE_LACK_CONNECT_PERMISSION:		
+        switch (failType) {
+            case Connection.CONNECT_FAIL_TYPE_LACK_CONNECT_PERMISSION:
                 ToastUtils.showShort("连接失败：缺少连接权限");
-        		break;
+                break;
             case Connection.CONNECT_FAIL_TYPE_CONNECTION_IS_UNSUPPORTED:
                 ToastUtils.showShort("连接失败：设备不支持连接");
                 break;
@@ -167,12 +165,12 @@ public class MainActivity extends BaseActivity {
     @Override
     public void onRequestFailed(@NonNull Request request, int failType, int gattStatus, @Nullable Object value) {
         if (gattStatus != -1) {
-            switch(gattStatus) {
-                case BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED:		
+            switch (gattStatus) {
+                case BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED:
                     ToastUtils.showShort("请求不支持");
-            		break;
-                default:		
-            		break;
+                    break;
+                default:
+                    break;
             }
         }
     }
@@ -233,13 +231,13 @@ public class MainActivity extends BaseActivity {
 
                     @Override
                     public void onRequestFailed(@NonNull Request request, int failType, int gattStatus, @Nullable Object value) {
-                        
+
                     }
                 }).build();
                 connection.execute(request);
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    new Handler(Looper.getMainLooper()).postDelayed(()-> {
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         connection.execute(new RequestBuilderFactory().getSetPreferredPhyBuilder(2, 2, 0).build());
                     }, 300);
                 }
@@ -280,13 +278,13 @@ public class MainActivity extends BaseActivity {
     public void onCharacteristicWrite(@NonNull Request request, @NonNull byte[] value) {
         Log.d("EasyBLE", "主线程：" + (Looper.getMainLooper() == Looper.myLooper()) + ", 成功写入：" + StringUtils.toHex(value, " "));
         if ("single_write_test".equals(request.getTag())) {
-            ToastUtils.showShort("成功写入：" + StringUtils.toHex(value, " "));            
+            ToastUtils.showShort("成功写入：" + StringUtils.toHex(value, " "));
         }
     }
 
     /**
      * notification数据
-     * 
+     *
      * @param device         设备
      * @param service        服务UUID
      * @param characteristic 特征UUID
@@ -322,6 +320,9 @@ public class MainActivity extends BaseActivity {
             }
             if (item.hasWriteProperty) {
                 menuItems.add("写入测试数据");
+                menuItems.add("清空文件");
+                menuItems.add("打印文件列表");
+
                 menuItems.add("发送文件");
             }
             new AlertDialog.Builder(MainActivity.this)
@@ -346,8 +347,18 @@ public class MainActivity extends BaseActivity {
                                 intent.putExtra("CHARACTERISTIC", new ParcelUuid(item.characteristic.getUuid()));
                                 startActivity(intent);
                                 break;
+                            case "清空文件":
+                                writeCharacteristic(item, new byte[]{(byte) 0xff, (byte) 0xff, (byte) 0xff});
+                                break;
+                            case "打印文件列表":
+                                writeCharacteristic(item, new byte[]{(byte) 0xaa, (byte) 0xaa, (byte) 0xaa});
+                                break;
                             default:
-                                writeCharacteristic(item);
+                                String str = "Multi-pass deformation also shows that in high-temperature rolling process, the material will be softened as a result of the recovery and recrystallization, so the rolling force is reduced and the time interval of the passes of rough rolling should be longer.";
+
+                                // 将字符串转换为 byte 数组
+                                byte[] data = str.getBytes();
+                                writeCharacteristic(item, data);
                                 break;
                         }
                     })
@@ -355,19 +366,14 @@ public class MainActivity extends BaseActivity {
         });
     }
 
-    private void writeCharacteristic(@NotNull Item item) {
+    private void writeCharacteristic(@NotNull Item item, byte[] data) {
         Log.d("EasyBLE", "开始写入");
-        WriteCharacteristicBuilder builder = new RequestBuilderFactory().getWriteCharacteristicBuilder(item.service.getUuid(), 
-                item.characteristic.getUuid(), ("Multi-pass deformation also shows that in high-temperature rolling process, " +
-                        "the material will be softened as a result of the recovery and recrystallization, " +
-                        "so the rolling force is reduced and the time interval of the passes of rough rolling should be longer." +
-                        "Multi-pass deformation also shows that in high-temperature rolling process, " +
-                        "the material will be softened as a result of the recovery and recrystallization, " +
-                        "so the rolling force is reduced and the time interval of the passes of rough rolling should be longer.").getBytes());
+        WriteCharacteristicBuilder builder = new RequestBuilderFactory().getWriteCharacteristicBuilder(item.service.getUuid(),
+                item.characteristic.getUuid(), data);
         builder.setTag("single_write_test");
         //根据需要设置写入配置
-        int writeType = connection.hasProperty(item.service.getUuid(), item.characteristic.getUuid(), 
-                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) ? 
+        int writeType = connection.hasProperty(item.service.getUuid(), item.characteristic.getUuid(),
+                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) ?
                 BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE : BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT;
         builder.setWriteOptions(new WriteOptions.Builder()
                 .setPackageSize(connection.getMtu() - 3)
@@ -402,7 +408,7 @@ public class MainActivity extends BaseActivity {
 
             @Override
             public void onRequestFailed(@NonNull Request request, int failType, int gattStatus, @Nullable Object value) {
-                
+
             }
         });
         builder.build().execute(connection);
@@ -414,7 +420,7 @@ public class MainActivity extends BaseActivity {
         //不设置回调，使用观察者模式接收结果
         builder.build().execute(connection);
     }
-    
+
     private void setIndication(@NotNull Item item) {
         boolean isEnabled = connection.isIndicationEnabled(item.service.getUuid(), item.characteristic.getUuid());
         RequestBuilder<IndicationChangeCallback> builder = new RequestBuilderFactory().getSetIndicationBuilder(item.service.getUuid(), item.characteristic.getUuid(), !isEnabled);
