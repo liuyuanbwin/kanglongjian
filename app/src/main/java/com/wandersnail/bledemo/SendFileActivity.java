@@ -123,7 +123,7 @@ public class SendFileActivity extends BaseActivity {
                 byte[] buf = new byte[packageSize];
 
 
-
+//lll
                 input = new ByteArrayInputStream(data);
 
                 try {
