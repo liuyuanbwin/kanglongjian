@@ -119,7 +119,7 @@ public class SendFileActivity extends BaseActivity {
             new Thread(()-> {
                 InputStream input = null;
 
-                int packageSize = 128;//connection.getMtu() - 3;
+                int packageSize = 256;//connection.getMtu() - 3;
                 byte[] buf = new byte[packageSize];
 
 
@@ -142,7 +142,7 @@ public class SendFileActivity extends BaseActivity {
                     }
                     while (sending && len != -1) {
                         if (queue.size() > 500) {
-                            Thread.sleep(100);
+                            Thread.sleep(10);
                         } else {
                             queue.add(Arrays.copyOf(buf, len));
                             len = input.read(buf);
